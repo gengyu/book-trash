@@ -1,0 +1,8 @@
+packages:
+  -  '.'  # Refers to the root directory
+onlyBuiltDependencies:
+  - '@tailwindcss/oxide'
+  - better-sqlite3
+  - esbuild
+  - faiss-node
+  - protobufjs
