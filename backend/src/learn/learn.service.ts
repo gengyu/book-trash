@@ -60,14 +60,11 @@ export class LearnService {
     const sessionId = uuidv4();
 
     try {
-      // Execute AI workflow
-      const documentContent = await this.aiWorkflowService.parseDocument(request.url);
-      const keyPoints = await this.aiWorkflowService.extractKeyPoints(documentContent.content);
-      const learningPath = await this.aiWorkflowService.generateLearningPath(keyPoints, request.level);
-      const quiz = await this.aiWorkflowService.generateQuiz(keyPoints);
-
+      // Execute full AI pipeline using the new agent system
+      const result = await this.aiWorkflowService.executeFullPipeline(request.url, request.level);
+      
       // Generate summary
-      const summary = this.generateSummary(documentContent.content, keyPoints);
+      const summary = this.generateSummary(result.documentContent.content, result.keyPoints);
 
       // Create and save learning session
       const learningSession = new LearningSession();
@@ -75,9 +72,9 @@ export class LearnService {
       learningSession.url = request.url;
       learningSession.userLevel = request.level;
       learningSession.summary = summary;
-      learningSession.setKeys(keyPoints);
-      learningSession.setPath(learningPath);
-      learningSession.setQuiz(quiz);
+      learningSession.setKeys(result.keyPoints);
+      learningSession.setPath(result.learningPath);
+      learningSession.setQuiz(result.quiz);
       learningSession.setDialogHistory([]);
 
       await this.learningSessionRepository.save(learningSession);
@@ -85,8 +82,8 @@ export class LearnService {
       return {
         sessionId,
         summary,
-        keys: keyPoints,
-        path: learningPath,
+        keys: result.keyPoints,
+        path: result.learningPath,
       };
     } catch (error) {
       throw new Error(`Failed to process learning request: ${error.message}`);
@@ -110,17 +107,17 @@ export class LearnService {
       // Get dialog history
       const dialogHistory = session.getDialogHistory();
 
-      // Get AI answer
+      // Get AI answer using the new agent system
       const answer = await this.aiWorkflowService.answerQuestion(
         request.question,
-        documentContent.content,
+        documentContent,
         dialogHistory
       );
 
       // Update dialog history
       session.addToDialogHistory({
         question: request.question,
-        answer: answer as string,
+        answer: answer,
         timestamp: new Date().toISOString()
       });
 
