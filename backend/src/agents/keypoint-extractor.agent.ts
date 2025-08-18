@@ -1,42 +1,43 @@
-import { BaseAgent } from './base-agent.abstract';
-import { AgentContext } from './base-agent.interface';
-import { 
-  KeyPointExtractorInput, 
-  KeyPointExtractorOutput, 
-  KeyPoint,
-  AgentErrorType 
+import {BaseAgent} from './base-agent.abstract';
+import {AgentContext} from './base-agent.interface';
+import {
+	KeyPointExtractorInput,
+	KeyPointExtractorOutput,
+	KeyPoint,
+	AgentErrorType
 } from './agent-types';
-import { PromptTemplate } from 'langchain/prompts';
-import { LLMChain } from 'langchain/chains';
+// import {PromptTemplate} from 'langchain/prompts';
+// LLMChain import removed as we're using the new pipe syntax
+import {ChatPromptTemplate, PromptTemplate} from "@langchain/core/prompts";
+import {ChatOpenAI} from "@langchain/openai";
 
 /**
  * 关键点提取智能体
  * 负责从文档内容中提取核心概念和关键点
  */
 export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, KeyPointExtractorOutput> {
-  private promptTemplate: PromptTemplate;
-  private chain: LLMChain;
+	private promptTemplate: PromptTemplate;
+	private chain: any; // Using any temporarily since we're using pipe syntax instead of LLMChain
 
-  constructor() {
-    super({
-      name: 'KeyPointExtractor',
-      description: '从文档内容中提取核心概念和关键点',
-      maxRetries: 2,
-      timeout: 30000
-    });
+	constructor() {
+		super({
+			name: 'KeyPointExtractor',
+			description: '从文档内容中提取核心概念和关键点',
+			maxRetries: 2,
+			timeout: 30000
+		});
 
-    this.initializePromptTemplate();
-    this.chain = new LLMChain({
-      llm: this.llm,
-      prompt: this.promptTemplate
-    });
-  }
+		this.initializePromptTemplate();
 
-  /**
-   * 初始化提示词模板
-   */
-  private initializePromptTemplate(): void {
-    const templateString = `你是一个专业的技术文档分析专家。请从以下文档内容中提取核心概念和关键点。
+		this.chain = this.promptTemplate.pipe(this.llm)
+
+	}
+
+	/**
+	 * 初始化提示词模板
+	 */
+	private initializePromptTemplate(): void {
+		const templateString = `你是一个专业的技术文档分析专家。请从以下文档内容中提取核心概念和关键点。
 
 文档标题: {title}
 文档内容: {content}
@@ -74,210 +75,209 @@ export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, Ke
 - 每个关键点的描述控制在100-200字以内
 
 请开始分析：`;
+		this.promptTemplate = new PromptTemplate({
+			inputVariables: ['title', 'content', 'userLevel', 'maxKeyPoints'],
+			template: templateString
+		});
+	}
 
-    this.promptTemplate = new PromptTemplate({
-      template: templateString,
-      inputVariables: ['title', 'content', 'userLevel', 'maxKeyPoints']
-    });
-  }
+	/**
+	 * 验证输入参数
+	 */
+	validateInput(input: KeyPointExtractorInput): boolean {
+		if (!input || !input.documentContent) {
+			return false;
+		}
 
-  /**
-   * 验证输入参数
-   */
-  validateInput(input: KeyPointExtractorInput): boolean {
-    if (!input || !input.documentContent) {
-      return false;
-    }
+		if (!input.documentContent.content || input.documentContent.content.trim().length === 0) {
+			return false;
+		}
 
-    if (!input.documentContent.content || input.documentContent.content.trim().length === 0) {
-      return false;
-    }
+		if (!input.userLevel || !['beginner', 'advanced'].includes(input.userLevel)) {
+			return false;
+		}
 
-    if (!input.userLevel || !['beginner', 'advanced'].includes(input.userLevel)) {
-      return false;
-    }
+		return true;
+	}
 
-    return true;
-  }
+	/**
+	 * 执行关键点提取
+	 */
+	protected async doExecute(
+		input: KeyPointExtractorInput,
+		context: AgentContext
+	): Promise<KeyPointExtractorOutput> {
+		try {
+			const {documentContent, userLevel, maxKeyPoints = 8} = input;
 
-  /**
-   * 执行关键点提取
-   */
-  protected async doExecute(
-    input: KeyPointExtractorInput, 
-    context: AgentContext
-  ): Promise<KeyPointExtractorOutput> {
-    try {
-      const { documentContent, userLevel, maxKeyPoints = 8 } = input;
-      
-      // 准备输入数据
-      const promptInput = {
-        title: documentContent.title || 'Untitled',
-        content: this.preprocessContent(documentContent.content),
-        userLevel: userLevel,
-        maxKeyPoints: maxKeyPoints.toString()
-      };
+			// 准备输入数据
+			const promptInput = {
+				title: documentContent.title || 'Untitled',
+				content: this.preprocessContent(documentContent.content),
+				userLevel: userLevel,
+				maxKeyPoints: maxKeyPoints.toString()
+			};
 
-      // 调用LLM进行关键点提取
-      const response = await this.chain.call(promptInput);
-      const responseText = response.text || response.response || '';
+			// 调用LLM进行关键点提取
+			const response = await this.chain.call(promptInput);
+			const responseText = response.text || response.response || '';
 
-      // 解析LLM响应
-      const keyPoints = this.parseKeyPointsResponse(responseText);
-      
-      // 验证和清理结果
-      const validatedKeyPoints = this.validateAndCleanKeyPoints(keyPoints, maxKeyPoints);
-      
-      if (validatedKeyPoints.length === 0) {
-        throw new Error('No valid key points extracted from the document');
-      }
+			// 解析LLM响应
+			const keyPoints = this.parseKeyPointsResponse(responseText);
 
-      return validatedKeyPoints;
+			// 验证和清理结果
+			const validatedKeyPoints = this.validateAndCleanKeyPoints(keyPoints, maxKeyPoints);
 
-    } catch (error) {
-      if (error.message.includes('timeout')) {
-        throw new Error(`${AgentErrorType.TIMEOUT_ERROR}: LLM request timeout`);
-      } else if (error.message.includes('API') || error.message.includes('model')) {
-        throw new Error(`${AgentErrorType.LLM_ERROR}: ${error.message}`);
-      } else if (error.message.includes('parse') || error.message.includes('JSON')) {
-        throw new Error(`${AgentErrorType.PARSING_ERROR}: Failed to parse LLM response`);
-      } else {
-        throw new Error(`${AgentErrorType.UNKNOWN_ERROR}: ${error.message}`);
-      }
-    }
-  }
+			if (validatedKeyPoints.length === 0) {
+				throw new Error('No valid key points extracted from the document');
+			}
 
-  /**
-   * 预处理文档内容
-   */
-  private preprocessContent(content: string): string {
-    // 限制内容长度以避免超出LLM token限制
-    const maxLength = 4000;
-    let processedContent = this.cleanText(content);
-    
-    if (processedContent.length > maxLength) {
-      // 智能截取：优先保留开头和结尾部分
-      const headLength = Math.floor(maxLength * 0.7);
-      const tailLength = maxLength - headLength - 50; // 留50字符给省略号
-      
-      const head = processedContent.substring(0, headLength);
-      const tail = processedContent.substring(processedContent.length - tailLength);
-      
-      processedContent = `${head}\n\n... [内容已截取] ...\n\n${tail}`;
-    }
-    
-    return processedContent;
-  }
+			return validatedKeyPoints;
 
-  /**
-   * 解析LLM响应中的关键点
-   */
-  private parseKeyPointsResponse(responseText: string): KeyPoint[] {
-    try {
-      // 尝试直接解析JSON
-      const parsed = this.safeJsonParse<KeyPoint[]>(responseText, []);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+		} catch (error) {
+			if (error.message.includes('timeout')) {
+				throw new Error(`${AgentErrorType.TIMEOUT_ERROR}: LLM request timeout`);
+			} else if (error.message.includes('API') || error.message.includes('model')) {
+				throw new Error(`${AgentErrorType.LLM_ERROR}: ${error.message}`);
+			} else if (error.message.includes('parse') || error.message.includes('JSON')) {
+				throw new Error(`${AgentErrorType.PARSING_ERROR}: Failed to parse LLM response`);
+			} else {
+				throw new Error(`${AgentErrorType.UNKNOWN_ERROR}: ${error.message}`);
+			}
+		}
+	}
 
-      // 如果直接解析失败，尝试提取JSON部分
-      const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
-      if (jsonMatch) {
-        const extracted = this.safeJsonParse<KeyPoint[]>(jsonMatch[0], []);
-        if (Array.isArray(extracted)) {
-          return extracted;
-        }
-      }
+	/**
+	 * 预处理文档内容
+	 */
+	private preprocessContent(content: string): string {
+		// 限制内容长度以避免超出LLM token限制
+		const maxLength = 4000;
+		let processedContent = this.cleanText(content);
 
-      // 如果JSON解析失败，尝试文本解析
-      return this.parseKeyPointsFromText(responseText);
+		if (processedContent.length > maxLength) {
+			// 智能截取：优先保留开头和结尾部分
+			const headLength = Math.floor(maxLength * 0.7);
+			const tailLength = maxLength - headLength - 50; // 留50字符给省略号
 
-    } catch (error) {
-      console.warn('Failed to parse key points response:', error);
-      return this.parseKeyPointsFromText(responseText);
-    }
-  }
+			const head = processedContent.substring(0, headLength);
+			const tail = processedContent.substring(processedContent.length - tailLength);
 
-  /**
-   * 从文本中解析关键点（备用方法）
-   */
-  private parseKeyPointsFromText(text: string): KeyPoint[] {
-    const keyPoints: KeyPoint[] = [];
-    const lines = text.split('\n');
-    
-    let currentKeyPoint: Partial<KeyPoint> = {};
-    
-    for (const line of lines) {
-      const trimmedLine = line.trim();
-      
-      // 检测概念名称
-      if (trimmedLine.match(/^\d+\.|^-|^\*/) && trimmedLine.length > 5) {
-        if (currentKeyPoint.concept) {
-          keyPoints.push(this.completeKeyPoint(currentKeyPoint));
-        }
-        currentKeyPoint = {
-          concept: trimmedLine.replace(/^\d+\.|^-|^\*/, '').trim(),
-          importance: 'medium'
-        };
-      } else if (trimmedLine.length > 10 && currentKeyPoint.concept) {
-        currentKeyPoint.description = (currentKeyPoint.description || '') + ' ' + trimmedLine;
-      }
-    }
-    
-    if (currentKeyPoint.concept) {
-      keyPoints.push(this.completeKeyPoint(currentKeyPoint));
-    }
-    
-    return keyPoints;
-  }
+			processedContent = `${head}\n\n... [内容已截取] ...\n\n${tail}`;
+		}
 
-  /**
-   * 完善关键点对象
-   */
-  private completeKeyPoint(partial: Partial<KeyPoint>): KeyPoint {
-    return {
-      concept: partial.concept || 'Unknown Concept',
-      description: partial.description || 'No description available',
-      importance: partial.importance || 'medium',
-      category: partial.category,
-      examples: partial.examples || []
-    };
-  }
+		return processedContent;
+	}
 
-  /**
-   * 验证和清理关键点
-   */
-  private validateAndCleanKeyPoints(keyPoints: KeyPoint[], maxCount: number): KeyPoint[] {
-    const validKeyPoints = keyPoints
-      .filter(kp => kp.concept && kp.concept.trim().length > 0)
-      .filter(kp => kp.description && kp.description.trim().length > 10)
-      .map(kp => ({
-        ...kp,
-        concept: this.cleanText(kp.concept).substring(0, 100),
-        description: this.cleanText(kp.description).substring(0, 300),
-        importance: ['high', 'medium', 'low'].includes(kp.importance) ? kp.importance : 'medium'
-      }))
-      .slice(0, maxCount);
+	/**
+	 * 解析LLM响应中的关键点
+	 */
+	private parseKeyPointsResponse(responseText: string): KeyPoint[] {
+		try {
+			// 尝试直接解析JSON
+			const parsed = this.safeJsonParse<KeyPoint[]>(responseText, []);
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				return parsed;
+			}
 
-    // 去重
-    const uniqueKeyPoints = validKeyPoints.filter((kp, index, arr) => 
-      arr.findIndex(other => other.concept.toLowerCase() === kp.concept.toLowerCase()) === index
-    );
+			// 如果直接解析失败，尝试提取JSON部分
+			const jsonMatch = responseText.match(/\[\s*{[\s\S]*}\s*\]/);
+			if (jsonMatch) {
+				const extracted = this.safeJsonParse<KeyPoint[]>(jsonMatch[0], []);
+				if (Array.isArray(extracted)) {
+					return extracted;
+				}
+			}
 
-    return uniqueKeyPoints;
-  }
+			// 如果JSON解析失败，尝试文本解析
+			return this.parseKeyPointsFromText(responseText);
 
-  /**
-   * 获取支持的文档类型
-   */
-  static getSupportedDocumentTypes(): string[] {
-    return [
-      'technical_documentation',
-      'api_reference',
-      'tutorial',
-      'guide',
-      'specification',
-      'manual'
-    ];
-  }
+		} catch (error) {
+			console.warn('Failed to parse key points response:', error);
+			return this.parseKeyPointsFromText(responseText);
+		}
+	}
+
+	/**
+	 * 从文本中解析关键点（备用方法）
+	 */
+	private parseKeyPointsFromText(text: string): KeyPoint[] {
+		const keyPoints: KeyPoint[] = [];
+		const lines = text.split('\n');
+
+		let currentKeyPoint: Partial<KeyPoint> = {};
+
+		for (const line of lines) {
+			const trimmedLine = line.trim();
+
+			// 检测概念名称
+			if (trimmedLine.match(/^\d+\.|^-|^\*/) && trimmedLine.length > 5) {
+				if (currentKeyPoint.concept) {
+					keyPoints.push(this.completeKeyPoint(currentKeyPoint));
+				}
+				currentKeyPoint = {
+					concept: trimmedLine.replace(/^\d+\.|^-|^\*/, '').trim(),
+					importance: 'medium'
+				};
+			} else if (trimmedLine.length > 10 && currentKeyPoint.concept) {
+				currentKeyPoint.description = (currentKeyPoint.description || '') + ' ' + trimmedLine;
+			}
+		}
+
+		if (currentKeyPoint.concept) {
+			keyPoints.push(this.completeKeyPoint(currentKeyPoint));
+		}
+
+		return keyPoints;
+	}
+
+	/**
+	 * 完善关键点对象
+	 */
+	private completeKeyPoint(partial: Partial<KeyPoint>): KeyPoint {
+		return {
+			concept: partial.concept || 'Unknown Concept',
+			description: partial.description || 'No description available',
+			importance: partial.importance || 'medium',
+			category: partial.category,
+			examples: partial.examples || []
+		};
+	}
+
+	/**
+	 * 验证和清理关键点
+	 */
+	private validateAndCleanKeyPoints(keyPoints: KeyPoint[], maxCount: number): KeyPoint[] {
+		const validKeyPoints = keyPoints
+			.filter(kp => kp.concept && kp.concept.trim().length > 0)
+			.filter(kp => kp.description && kp.description.trim().length > 10)
+			.map(kp => ({
+				...kp,
+				concept: this.cleanText(kp.concept).substring(0, 100),
+				description: this.cleanText(kp.description).substring(0, 300),
+				importance: ['high', 'medium', 'low'].includes(kp.importance) ? kp.importance : 'medium'
+			}))
+			.slice(0, maxCount);
+
+		// 去重
+		const uniqueKeyPoints = validKeyPoints.filter((kp, index, arr) =>
+			arr.findIndex(other => other.concept.toLowerCase() === kp.concept.toLowerCase()) === index
+		);
+
+		return uniqueKeyPoints;
+	}
+
+	/**
+	 * 获取支持的文档类型
+	 */
+	static getSupportedDocumentTypes(): string[] {
+		return [
+			'technical_documentation',
+			'api_reference',
+			'tutorial',
+			'guide',
+			'specification',
+			'manual'
+		];
+	}
 }
