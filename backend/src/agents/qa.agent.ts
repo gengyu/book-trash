@@ -8,7 +8,8 @@ import {
   AgentErrorType 
 } from './agent-types';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { LLMChain } from 'langchain/chains';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { Runnable } from '@langchain/core/runnables';
 
 /**
  * 问答智能体
@@ -16,7 +17,7 @@ import { LLMChain } from 'langchain/chains';
  */
 export class QAAgent extends BaseAgent<QAInput, QAOutput> {
   private promptTemplate: PromptTemplate;
-  private chain: LLMChain;
+  private chain: Runnable<any, string>;
   private readonly maxHistoryLength = 10; // 最大对话历史长度
   private readonly maxContextLength = 3000; // 最大上下文长度
 
@@ -29,10 +30,7 @@ export class QAAgent extends BaseAgent<QAInput, QAOutput> {
     });
 
     this.initializePromptTemplate();
-    this.chain = new LLMChain({
-      llm: this.llm,
-      prompt: this.promptTemplate
-    });
+    this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
   }
 
   /**
@@ -135,8 +133,7 @@ export class QAAgent extends BaseAgent<QAInput, QAOutput> {
       };
 
       // 调用LLM生成回答
-      const response = await this.chain.call(promptInput);
-      const answer = response.text || response.response || '';
+      const answer = await this.chain.invoke(promptInput);
 
       // 后处理回答
       const processedAnswer = this.postprocessAnswer(answer, processedQuestion);

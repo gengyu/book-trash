@@ -8,7 +8,8 @@ import {
   AgentErrorType 
 } from './agent-types';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { LLMChain } from 'langchain/chains';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { Runnable } from '@langchain/core/runnables';
 
 /**
  * 学习路径生成智能体
@@ -16,7 +17,7 @@ import { LLMChain } from 'langchain/chains';
  */
 export class LearningPathAgent extends BaseAgent<LearningPathInput, LearningPathOutput> {
   private promptTemplate: PromptTemplate;
-  private chain: LLMChain;
+  private chain: Runnable<any, string>;
 
   constructor() {
     super({
@@ -27,10 +28,7 @@ export class LearningPathAgent extends BaseAgent<LearningPathInput, LearningPath
     });
 
     this.initializePromptTemplate();
-    this.chain = new LLMChain({
-      llm: this.llm,
-      prompt: this.promptTemplate
-    });
+    this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
   }
 
   /**
@@ -64,14 +62,14 @@ export class LearningPathAgent extends BaseAgent<LearningPathInput, LearningPath
 
 请以JSON格式返回学习路径，格式如下：
 [
-  {
+  {{
     "step": "步骤标题",
     "time": "预估时间（如：30分钟、1小时）",
     "description": "详细描述",
     "code": "代码示例（可选）",
     "prerequisites": ["前置要求1", "前置要求2"],
     "resources": ["资源链接1", "资源链接2"]
-  }
+  }}
 ]
 
 要求：
@@ -131,8 +129,7 @@ export class LearningPathAgent extends BaseAgent<LearningPathInput, LearningPath
       };
 
       // 调用LLM生成学习路径
-      const response = await this.chain.call(promptInput);
-      const responseText = response.text || response.response || '';
+      const responseText = await this.chain.invoke(promptInput);
 
       // 解析LLM响应
       const learningSteps = this.parseLearningPathResponse(responseText);

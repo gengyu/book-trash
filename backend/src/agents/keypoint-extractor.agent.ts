@@ -3,6 +3,8 @@ import {AgentContext} from './base-agent.interface';
 import {AgentErrorType, KeyPoint, KeyPointExtractorInput, KeyPointExtractorOutput} from './agent-types';
 
 import {PromptTemplate} from "@langchain/core/prompts";
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { Runnable } from '@langchain/core/runnables';
 
 /**
  * 关键点提取智能体
@@ -10,7 +12,7 @@ import {PromptTemplate} from "@langchain/core/prompts";
  */
 export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, KeyPointExtractorOutput> {
 	private promptTemplate: PromptTemplate;
-	private chain: any; // Using any temporarily since we're using pipe syntax instead of LLMChain
+	private chain: Runnable<any, string>;
 
 	constructor() {
 		super({
@@ -22,7 +24,7 @@ export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, Ke
 
 		this.initializePromptTemplate();
 
-		this.chain = this.promptTemplate.pipe(this.llm)
+		this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
 
 	}
 
@@ -51,13 +53,13 @@ export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, Ke
 
 请以JSON格式返回结果，格式如下：
 [
-  {
+  {{
     "concept": "概念名称",
     "description": "详细描述",
     "importance": "high|medium|low",
     "category": "分类（可选）",
     "examples": ["示例1", "示例2"]
-  }
+  }}
 ]
 
 要求：
@@ -112,8 +114,7 @@ export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, Ke
 			};
 
 			// 调用LLM进行关键点提取
-			const response = await this.chain.call(promptInput);
-			const responseText = response.text || response.response || '';
+			const responseText = await this.chain.invoke(promptInput);
 
 			// 解析LLM响应
 			const keyPoints = this.parseKeyPointsResponse(responseText);

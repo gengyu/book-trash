@@ -8,7 +8,8 @@ import {
   AgentErrorType 
 } from './agent-types';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { LLMChain } from 'langchain/chains';
+import { StringOutputParser } from '@langchain/core/output_parsers';
+import { Runnable } from '@langchain/core/runnables';
 
 /**
  * 测验生成智能体
@@ -16,7 +17,7 @@ import { LLMChain } from 'langchain/chains';
  */
 export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput> {
   private promptTemplate: PromptTemplate;
-  private chain: LLMChain;
+  private chain: Runnable<any, string>;
   private readonly maxContentLength = 2500; // 最大内容长度
   private readonly defaultQuestionCount = 5; // 默认题目数量
 
@@ -29,11 +30,7 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
     });
 
     this.initializePromptTemplate();
-    this.chain = new LLMChain({
-      llm: this.llm,
-      prompt: this.promptTemplate,
-      verbose: false
-    });
+    this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
   }
 
   /**
@@ -59,7 +56,7 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
 
 \`\`\`json
 [
-  {
+  {{
     "id": "q1",
     "type": "multiple_choice",
     "question": "题目内容",
@@ -69,8 +66,8 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
     "difficulty": "easy",
     "concept": "相关概念",
     "points": 1
-  },
-  {
+  }},
+  {{
     "id": "q2",
     "type": "true_false",
     "question": "判断题内容",
@@ -80,8 +77,8 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
     "difficulty": "medium",
     "concept": "相关概念",
     "points": 1
-  },
-  {
+  }},
+  {{
     "id": "q3",
     "type": "fill_blank",
     "question": "填空题内容，空白处用 _____ 表示",
@@ -91,7 +88,7 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
     "difficulty": "hard",
     "concept": "相关概念",
     "points": 2
-  }
+  }}
 ]
 \`\`\`
 
@@ -194,8 +191,7 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
       };
 
       // 调用LLM生成测验
-      const response = await this.chain.call(promptInput);
-      const rawOutput = response.text || response.response || '';
+      const rawOutput = await this.chain.invoke(promptInput);
 
       // 解析和验证生成的题目
       const questions = this.parseQuizQuestions(rawOutput);
