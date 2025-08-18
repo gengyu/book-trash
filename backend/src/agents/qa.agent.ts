@@ -7,7 +7,7 @@ import {
   DocumentContent,
   AgentErrorType 
 } from './agent-types';
-import { PromptTemplate } from 'langchain/prompts';
+import { PromptTemplate } from '@langchain/core/prompts';
 import { LLMChain } from 'langchain/chains';
 
 /**

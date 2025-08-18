@@ -1,4 +1,4 @@
-import { CheerioWebBaseLoader } from 'langchain/document_loaders/web/cheerio';
+import { CheerioWebBaseLoader } from '@langchain/community/document_loaders/web/cheerio';
 import { BaseAgent } from './base-agent.abstract';
 import { AgentContext } from './base-agent.interface';
 import { 

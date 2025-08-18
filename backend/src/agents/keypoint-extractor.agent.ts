@@ -1,15 +1,8 @@
 import {BaseAgent} from './base-agent.abstract';
 import {AgentContext} from './base-agent.interface';
-import {
-	KeyPointExtractorInput,
-	KeyPointExtractorOutput,
-	KeyPoint,
-	AgentErrorType
-} from './agent-types';
-// import {PromptTemplate} from 'langchain/prompts';
-// LLMChain import removed as we're using the new pipe syntax
-import {ChatPromptTemplate, PromptTemplate} from "@langchain/core/prompts";
-import {ChatOpenAI} from "@langchain/openai";
+import {AgentErrorType, KeyPoint, KeyPointExtractorInput, KeyPointExtractorOutput} from './agent-types';
+
+import {PromptTemplate} from "@langchain/core/prompts";
 
 /**
  * 关键点提取智能体
