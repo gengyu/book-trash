@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { LLMManager } from '../llms';
 import { DocumentParserAgent } from './document-parser.agent';
 import { KeyPointExtractorAgent } from './keypoint-extractor.agent';
 import { LearningPathAgent } from './learning-path.agent';
@@ -86,8 +87,13 @@ export class AgentOrchestrator {
   
   private readonly defaultTimeout = 60000; // 默认超时时间
   private readonly maxConcurrentAgents = 3; // 最大并发智能体数量
+  private readonly defaultLLMName?: string; // 默认LLM名称
 
-  constructor() {
+  constructor(
+    defaultLLMName?: string,
+    @Inject(LLMManager) private readonly llmManager?: LLMManager
+  ) {
+    this.defaultLLMName = defaultLLMName;
     this.initializeAgents();
   }
 
@@ -96,11 +102,20 @@ export class AgentOrchestrator {
    */
   private initializeAgents(): void {
     try {
-      this.documentParser = new DocumentParserAgent();
-      this.keyPointExtractor = new KeyPointExtractorAgent();
-      this.learningPathAgent = new LearningPathAgent();
-      this.qaAgent = new QAAgent();
-      this.quizAgent = new QuizAgent();
+      this.documentParser = new DocumentParserAgent(this.defaultLLMName);
+      this.keyPointExtractor = new KeyPointExtractorAgent(this.defaultLLMName);
+      this.learningPathAgent = new LearningPathAgent(this.defaultLLMName);
+      this.qaAgent = new QAAgent(this.defaultLLMName);
+      this.quizAgent = new QuizAgent(this.defaultLLMName);
+      
+      // 如果有LLMManager，设置给所有agents
+      if (this.llmManager) {
+        this.documentParser.setLLMManagerInstance(this.llmManager);
+        this.keyPointExtractor.setLLMManagerInstance(this.llmManager);
+        this.learningPathAgent.setLLMManagerInstance(this.llmManager);
+        this.qaAgent.setLLMManagerInstance(this.llmManager);
+        this.quizAgent.setLLMManagerInstance(this.llmManager);
+      }
       
       this.logger.log('All agents initialized successfully');
     } catch (error) {

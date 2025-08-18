@@ -1,4 +1,5 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { ILLMInstance, LLMManager } from '../llms';
+import { Inject, Injectable } from '@nestjs/common';
 import { 
   IAgent, 
   AgentContext, 
@@ -14,22 +15,63 @@ import {
  */
 export abstract class BaseAgent<TInput = any, TOutput = any> implements IAgent<TInput, TOutput> {
   protected readonly config: AgentConfig;
-  protected readonly llm: ChatOpenAI;
+  protected llm: any; // LangChain模型实例
+  protected llmInstance: ILLMInstance;
   protected status: 'idle' | 'running' | 'error' = 'idle';
   protected eventListeners: IAgentEventListener[] = [];
+  protected static llmManager: LLMManager;
 
-  constructor(config: AgentConfig) {
+  constructor(config: AgentConfig, protected llmName?: string) {
     this.config = {
       maxRetries: 3,
       timeout: 30000,
       ...config
     };
     
-    this.llm = config.llm || new ChatOpenAI({
-      modelName: 'gpt-3.5-turbo',
-      temperature: 0.7,
-      maxTokens: 2000
-    });
+    // 如果传入了自定义的llm实例，直接使用
+    if (config.llm) {
+      this.llm = config.llm;
+      this.llmInstance = null as any; // 兼容性处理
+    }
+    // 注意：LLM初始化将在execute方法中进行，因为需要异步操作
+  }
+
+  /**
+   * 设置LLM管理器（静态方法，全局设置）
+   */
+  static setLLMManager(manager: LLMManager): void {
+    BaseAgent.llmManager = manager;
+  }
+
+  /**
+   * 设置LLM管理器实例（用于依赖注入）
+   */
+  setLLMManagerInstance(manager: LLMManager): void {
+    BaseAgent.llmManager = manager;
+  }
+
+  /**
+   * 初始化LLM实例
+   */
+  private async initializeLLM(): Promise<void> {
+    if (this.llm) {
+      return; // 已经初始化过了
+    }
+
+    if (!BaseAgent.llmManager) {
+      throw new Error('LLM Manager not initialized. Please call BaseAgent.setLLMManager() first.');
+    }
+
+    try {
+      if (this.llmName) {
+        this.llmInstance = await BaseAgent.llmManager.getLLM(this.llmName);
+      } else {
+        this.llmInstance = await BaseAgent.llmManager.getDefaultLLM();
+      }
+      this.llm = this.llmInstance.instance;
+    } catch (error) {
+      throw new Error(`Failed to initialize LLM for agent ${this.config.name}: ${error.message}`);
+    }
   }
 
   get name(): string {
@@ -42,6 +84,13 @@ export abstract class BaseAgent<TInput = any, TOutput = any> implements IAgent<T
 
   getStatus(): 'idle' | 'running' | 'error' {
     return this.status;
+  }
+
+  /**
+   * 获取当前使用的LLM信息
+   */
+  getLLMInfo(): any {
+    return this.llmInstance?.getModelInfo() || null;
   }
 
   /**
@@ -93,6 +142,9 @@ export abstract class BaseAgent<TInput = any, TOutput = any> implements IAgent<T
         error: `Invalid input for agent ${this.name}`
       };
     }
+
+    // 确保LLM已初始化
+    await this.initializeLLM();
 
     this.status = 'running';
     this.emitEvent(AgentEventType.STARTED, context.sessionId, { input });

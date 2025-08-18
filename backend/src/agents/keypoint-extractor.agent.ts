@@ -14,18 +14,16 @@ export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, Ke
 	private promptTemplate: PromptTemplate;
 	private chain: Runnable<any, string>;
 
-	constructor() {
+	constructor(llmName?: string) {
 		super({
 			name: 'KeyPointExtractor',
 			description: '从文档内容中提取核心概念和关键点',
 			maxRetries: 2,
 			timeout: 30000
-		});
+		}, llmName);
 
 		this.initializePromptTemplate();
-
-		this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
-
+		// 注意：chain的初始化将在execute方法中进行，因为llm需要异步初始化
 	}
 
 	/**
@@ -102,6 +100,10 @@ export class KeyPointExtractorAgent extends BaseAgent<KeyPointExtractorInput, Ke
 		input: KeyPointExtractorInput,
 		context: AgentContext
 	): Promise<KeyPointExtractorOutput> {
+		// 确保chain已初始化
+		if (!this.chain) {
+			this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+		}
 		try {
 			const {documentContent, userLevel, maxKeyPoints = 8} = input;
 

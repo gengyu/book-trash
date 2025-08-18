@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
+import { LLMManager } from '../llms';
 import { AgentOrchestrator, WorkflowInput, WorkflowOutput } from '../agents/agent-orchestrator';
 import { SimpleWorkflowExecutor } from '../agents/langgraph-workflow';
 import { PromptTemplateService } from '../prompts/prompt-template.service';
@@ -18,8 +19,12 @@ export class AIWorkflowService {
   private orchestrator: AgentOrchestrator;
   private workflowExecutor: SimpleWorkflowExecutor;
 
-  constructor(private readonly promptTemplateService: PromptTemplateService) {
-    this.orchestrator = new AgentOrchestrator();
+  constructor(
+    private readonly promptTemplateService: PromptTemplateService,
+    @Inject(LLMManager) private readonly llmManager?: LLMManager,
+    private readonly defaultLLMName?: string
+  ) {
+    this.orchestrator = new AgentOrchestrator(this.defaultLLMName, this.llmManager);
     this.workflowExecutor = new SimpleWorkflowExecutor();
   }
 

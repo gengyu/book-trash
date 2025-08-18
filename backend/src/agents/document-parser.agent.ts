@@ -13,13 +13,13 @@ import * as validator from 'validator';
  * 负责从URL加载和解析文档内容
  */
 export class DocumentParserAgent extends BaseAgent<DocumentParserInput, DocumentParserOutput> {
-  constructor() {
+  constructor(llmName?: string) {
     super({
       name: 'DocumentParser',
       description: '解析网页文档内容，提取标题和正文',
       maxRetries: 3,
       timeout: 15000
-    });
+    }, llmName);
   }
 
   /**

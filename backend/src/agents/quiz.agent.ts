@@ -21,16 +21,16 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
   private readonly maxContentLength = 2500; // 最大内容长度
   private readonly defaultQuestionCount = 5; // 默认题目数量
 
-  constructor() {
+  constructor(llmName?: string) {
     super({
       name: 'Quiz',
       description: '根据学习内容生成多种类型的测试题目',
       maxRetries: 2,
       timeout: 30000
-    });
+    }, llmName);
 
     this.initializePromptTemplate();
-    this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+    // 注意：chain的初始化将在execute方法中进行，因为llm需要异步初始化
   }
 
   /**
@@ -160,6 +160,10 @@ export class QuizAgent extends BaseAgent<QuizGeneratorInput, QuizGeneratorOutput
     input: QuizGeneratorInput, 
     context: AgentContext
   ): Promise<QuizGeneratorOutput> {
+    // 确保chain已初始化
+    if (!this.chain) {
+      this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+    }
     try {
       const {
         documentContent,

@@ -21,16 +21,16 @@ export class QAAgent extends BaseAgent<QAInput, QAOutput> {
   private readonly maxHistoryLength = 10; // 最大对话历史长度
   private readonly maxContextLength = 3000; // 最大上下文长度
 
-  constructor() {
+  constructor(llmName?: string) {
     super({
       name: 'QA',
       description: '基于文档内容回答用户问题，维护对话上下文',
       maxRetries: 2,
       timeout: 25000
-    });
+    }, llmName);
 
     this.initializePromptTemplate();
-    this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+    // 注意：chain的初始化将在execute方法中进行，因为llm需要异步初始化
   }
 
   /**
@@ -108,6 +108,10 @@ export class QAAgent extends BaseAgent<QAInput, QAOutput> {
     input: QAInput, 
     context: AgentContext
   ): Promise<QAOutput> {
+    // 确保chain已初始化
+    if (!this.chain) {
+      this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+    }
     try {
       const { question, documentContent, keyPoints, conversationHistory } = input;
       

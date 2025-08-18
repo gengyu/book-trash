@@ -19,16 +19,16 @@ export class LearningPathAgent extends BaseAgent<LearningPathInput, LearningPath
   private promptTemplate: PromptTemplate;
   private chain: Runnable<any, string>;
 
-  constructor() {
+  constructor(llmName?: string) {
     super({
       name: 'LearningPath',
       description: '根据关键点和用户水平生成个性化学习路径',
       maxRetries: 2,
       timeout: 30000
-    });
+    }, llmName);
 
     this.initializePromptTemplate();
-    this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+    // 注意：chain的初始化将在execute方法中进行，因为llm需要异步初始化
   }
 
   /**
@@ -114,6 +114,10 @@ export class LearningPathAgent extends BaseAgent<LearningPathInput, LearningPath
     input: LearningPathInput, 
     context: AgentContext
   ): Promise<LearningPathOutput> {
+    // 确保chain已初始化
+    if (!this.chain) {
+      this.chain = this.promptTemplate.pipe(this.llm).pipe(new StringOutputParser());
+    }
     try {
       const { keyPoints, userLevel, timeConstraint, focusAreas } = input;
       
