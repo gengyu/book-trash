@@ -9,6 +9,7 @@ import {
   LearningStep, 
   QuizQuestion 
 } from '../agents/agent-types';
+import {ConfigService} from "@nestjs/config";
 
 // 保持向后兼容的接口导出
 export { DocumentContent, KeyPoint, LearningStep, QuizQuestion };
@@ -20,11 +21,11 @@ export class AIWorkflowService {
   private workflowExecutor: SimpleWorkflowExecutor;
 
   constructor(
+    private configService: ConfigService,
     private readonly promptTemplateService: PromptTemplateService,
     @Inject(LLMManager) private readonly llmManager?: LLMManager,
-    private readonly defaultLLMName?: string
   ) {
-    this.orchestrator = new AgentOrchestrator(this.defaultLLMName, this.llmManager);
+    this.orchestrator = new AgentOrchestrator(this.configService.get('DEFAULT_LLM_PROVIDER'), this.llmManager);
     this.workflowExecutor = new SimpleWorkflowExecutor();
   }
 
